@@ -113,6 +113,8 @@ const App: React.FC = () => {
 
     try {
       const cleanBase64 = currentImage.split(',')[1];
+      // Extract mime type for correct API usage (e.g. "image/png")
+      const mimeType = currentImage.split(';')[0].split(':')[1];
 
       if (editMode === EditMode.COLOR) {
           // --- COLOR GRADE MODE ---
@@ -126,19 +128,17 @@ const App: React.FC = () => {
           // Save current state for Undo before applying change
           setOriginalImageForUndo(currentImage);
           
-          const newImageBase64 = await generativeEditImage(cleanBase64, promptText);
-          setCurrentImage(`data:image/jpeg;base64,${newImageBase64}`);
+          const newImageBase64 = await generativeEditImage(cleanBase64, promptText, mimeType);
+          // Re-attach the same mime type to the returned base64 data
+          setCurrentImage(`data:${mimeType};base64,${newImageBase64}`);
           setAiReasoning("Magic edit applied successfully!");
       }
 
       setShowCompare(false); 
     } catch (error: any) {
       console.error("AI Error", error);
-      let errorMsg = "Oops! The spell fizzled. Please try again.";
-      if (error.message?.includes("403")) {
-          errorMsg = "Access Denied (403): Please check 'Website restrictions' in Google Cloud Console.";
-      }
-      setAiReasoning(errorMsg);
+      // SHOW RAW ERROR MESSAGE
+      setAiReasoning(`ERROR: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -420,7 +420,7 @@ const App: React.FC = () => {
               </div>
 
               {aiReasoning && (
-                  <div className="p-3 bg-black/20 rounded-lg text-sm text-gray-300 italic border-l-2 border-banana-500">
+                  <div className={`p-3 rounded-lg text-sm italic border-l-2 ${aiReasoning.startsWith('ERROR:') ? 'bg-red-500/20 text-red-200 border-red-500' : 'bg-black/20 text-gray-300 border-banana-500'}`}>
                       "{aiReasoning}"
                   </div>
               )}

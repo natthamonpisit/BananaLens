@@ -118,7 +118,8 @@ export const analyzeImageAndGetSettings = async (
 
 export const generativeEditImage = async (
   imageBase64: string,
-  prompt: string
+  prompt: string,
+  mimeType: string = "image/jpeg"
 ): Promise<string> => {
   const model = "gemini-2.5-flash-image";
 
@@ -132,7 +133,7 @@ export const generativeEditImage = async (
         parts: [
           {
             inlineData: {
-              mimeType: "image/jpeg",
+              mimeType: mimeType,
               data: imageBase64,
             },
           },
