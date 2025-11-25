@@ -2,8 +2,8 @@ import React, { useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import ImageUploader from './components/ImageUploader';
 import BeforeAfter from './components/BeforeAfter';
-import { ViewMode, FilterSettings, PhotoItem } from './types';
-import { analyzeImageAndGetSettings, fileToGenerativePart } from './services/geminiService';
+import { ViewMode, FilterSettings, PhotoItem, EditMode } from './types';
+import { analyzeImageAndGetSettings, fileToGenerativePart, generativeEditImage } from './services/geminiService';
 
 const defaultSettings: FilterSettings = {
   brightness: 100,
@@ -49,11 +49,15 @@ const App: React.FC = () => {
   
   // Editor State
   const [currentImage, setCurrentImage] = useState<string | null>(null);
+  const [originalImageForUndo, setOriginalImageForUndo] = useState<string | null>(null); // To support Undo
   const [currentSettings, setCurrentSettings] = useState<FilterSettings>(defaultSettings);
   const [isProcessing, setIsProcessing] = useState(false);
   const [aiReasoning, setAiReasoning] = useState<string>("");
   const [showCompare, setShowCompare] = useState(false);
   
+  // Edit Mode (Color vs Magic)
+  const [editMode, setEditMode] = useState<EditMode>(EditMode.COLOR);
+
   // Inputs
   const [promptText, setPromptText] = useState("");
   const [refImage, setRefImage] = useState<string | null>(null);
@@ -65,10 +69,13 @@ const App: React.FC = () => {
   const handleImageSelect = async (file: File) => {
     try {
       const base64 = await fileToGenerativePart(file);
-      setCurrentImage(`data:${file.type};base64,${base64}`);
+      const fullBase64 = `data:${file.type};base64,${base64}`;
+      setCurrentImage(fullBase64);
+      setOriginalImageForUndo(fullBase64); // Initial state
       setCurrentSettings(defaultSettings);
       setAiReasoning("");
       setShowCompare(false);
+      setEditMode(EditMode.COLOR);
     } catch (error) {
       console.error("Error loading image", error);
     }
@@ -76,11 +83,19 @@ const App: React.FC = () => {
 
   const handleResetImage = () => {
       setCurrentImage(null);
+      setOriginalImageForUndo(null);
       setCurrentSettings(defaultSettings);
       setAiReasoning("");
       setShowCompare(false);
       setPromptText("");
       setRefImage(null);
+  };
+
+  const handleUndo = () => {
+      if (originalImageForUndo) {
+          setCurrentImage(originalImageForUndo);
+          setAiReasoning("Reverted to original image.");
+      }
   };
 
   const handleRefImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,16 +109,28 @@ const App: React.FC = () => {
     if (!currentImage) return;
 
     setIsProcessing(true);
-    setAiReasoning("Nano Banana is analyzing histogram, exposure, and composition...");
+    setAiReasoning("Nano Banana is working its magic...");
 
     try {
       const cleanBase64 = currentImage.split(',')[1];
-      const cleanRefBase64 = refImage ? refImage.split(',')[1] : undefined;
 
-      const result = await analyzeImageAndGetSettings(cleanBase64, promptText, cleanRefBase64);
-      
-      setCurrentSettings(prev => ({...prev, ...result.suggestedSettings}));
-      setAiReasoning(result.reasoning);
+      if (editMode === EditMode.COLOR) {
+          // --- COLOR GRADE MODE ---
+          const cleanRefBase64 = refImage ? refImage.split(',')[1] : undefined;
+          const result = await analyzeImageAndGetSettings(cleanBase64, promptText, cleanRefBase64);
+          setCurrentSettings(prev => ({...prev, ...result.suggestedSettings}));
+          setAiReasoning(result.reasoning);
+
+      } else {
+          // --- MAGIC EDIT MODE ---
+          // Save current state for Undo before applying change
+          setOriginalImageForUndo(currentImage);
+          
+          const newImageBase64 = await generativeEditImage(cleanBase64, promptText);
+          setCurrentImage(`data:image/jpeg;base64,${newImageBase64}`);
+          setAiReasoning("Magic edit applied successfully!");
+      }
+
       setShowCompare(false); 
     } catch (error: any) {
       console.error("AI Error", error);
@@ -121,10 +148,10 @@ const App: React.FC = () => {
     if (!currentImage) return;
     const newItem: PhotoItem = {
         id: Date.now().toString() + Math.random().toString().slice(2,6),
-        originalUrl: currentImage,
+        originalUrl: currentImage, // Saves the current state (including magic edits)
         name: `Photo ${collection.length + 1}`,
         timestamp: Date.now(),
-        settings: currentSettings
+        settings: currentSettings // Saves current CSS filters
     };
     setCollection([newItem, ...collection]);
     alert("Saved to collection!");
@@ -234,17 +261,32 @@ const App: React.FC = () => {
           <ImageUploader onImageSelected={handleImageSelect} />
         ) : (
           <>
-            {/* New Photo Button */}
-            <button
-               onClick={handleResetImage}
-               className="absolute top-6 right-6 z-40 bg-black/50 hover:bg-banana-500 text-white px-4 py-2 rounded-lg backdrop-blur-md flex items-center gap-2 transition-colors border border-white/10 shadow-lg"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Upload New
-            </button>
+            {/* Top Right Controls */}
+            <div className="absolute top-6 right-6 z-40 flex gap-2">
+                {/* Undo Button (Only visible if we have changes in Magic Mode or want to revert) */}
+                {editMode === EditMode.MAGIC && currentImage !== originalImageForUndo && (
+                    <button
+                        onClick={handleUndo}
+                        className="bg-black/50 hover:bg-white/20 text-white px-4 py-2 rounded-lg backdrop-blur-md flex items-center gap-2 transition-colors border border-white/10 shadow-lg"
+                        title="Undo Magic Edit"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                        Undo
+                    </button>
+                )}
+                
+                {/* Upload New Button */}
+                <button
+                onClick={handleResetImage}
+                className="bg-black/50 hover:bg-banana-500 text-white px-4 py-2 rounded-lg backdrop-blur-md flex items-center gap-2 transition-colors border border-white/10 shadow-lg"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload New
+                </button>
+            </div>
 
             <div className="relative flex items-center justify-center max-w-full max-h-full shadow-2xl">
-                {/* Unified Viewer Component with Shadow applied to the wrapper which fits the image */}
+                {/* Unified Viewer Component */}
                 <BeforeAfter 
                     originalUrl={currentImage} 
                     settings={currentSettings} 
@@ -269,13 +311,32 @@ const App: React.FC = () => {
           {/* Unified Controls */}
           <div className={`bg-dark-surface p-6 rounded-2xl border border-dark-border space-y-6 shadow-lg transition-opacity ${!currentImage ? 'opacity-80' : ''}`}>
               
-              {/* Top Row: Header & Inputs */}
+              {/* Top Row: Header, Mode Switch & Inputs */}
               <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                      <h3 className="text-xl font-semibold text-white flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                          Magic Controls
-                      </h3>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-4">
+                          <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                              Magic Controls
+                          </h3>
+                          
+                          {/* Mode Toggle */}
+                          <div className="bg-black/40 p-1 rounded-lg flex items-center border border-white/10">
+                              <button
+                                  onClick={() => setEditMode(EditMode.COLOR)}
+                                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${editMode === EditMode.COLOR ? 'bg-banana-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                              >
+                                  🎨 Color
+                              </button>
+                              <button
+                                  onClick={() => setEditMode(EditMode.MAGIC)}
+                                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1 ${editMode === EditMode.MAGIC ? 'bg-banana-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                              >
+                                  ✨ Magic Edit
+                              </button>
+                          </div>
+                      </div>
+
                        {aiReasoning && !isProcessing && (
                            <span className="text-xs text-banana-400 bg-banana-500/10 px-2 py-1 rounded-full border border-banana-500/20 hidden md:inline-block">Applied</span>
                        )}
@@ -285,17 +346,19 @@ const App: React.FC = () => {
                       <div className="flex-1 relative">
                           <input 
                               type="text" 
-                              placeholder="Describe a style (e.g. 'Cyberpunk city', 'Warm vintage film')"
+                              placeholder={editMode === EditMode.COLOR ? "Describe a style (e.g. 'Cyberpunk city', 'Warm vintage film')" : "Describe what to edit (e.g. 'Remove pimples', 'Add sunglasses')"}
                               className="w-full bg-black/30 border border-dark-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-banana-500 transition-colors text-white pr-10"
                               value={promptText}
                               onChange={(e) => setPromptText(e.target.value)}
                           />
-                          <label className="absolute right-2 top-2 p-1 bg-dark-surface hover:bg-white/10 rounded cursor-pointer text-gray-400 hover:text-white" title="Add Reference Image">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><image x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                              <input type="file" accept="image/*" className="hidden" onChange={handleRefImageSelect} />
-                          </label>
+                          {editMode === EditMode.COLOR && (
+                              <label className="absolute right-2 top-2 p-1 bg-dark-surface hover:bg-white/10 rounded cursor-pointer text-gray-400 hover:text-white" title="Add Reference Image">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><image x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                  <input type="file" accept="image/*" className="hidden" onChange={handleRefImageSelect} />
+                              </label>
+                          )}
                       </div>
-                      {refImage && (
+                      {refImage && editMode === EditMode.COLOR && (
                           <div className="h-11 w-11 relative group shrink-0">
                               <img src={refImage} className="h-full w-full rounded-lg object-cover border border-banana-500" alt="ref" />
                               <button 
@@ -318,7 +381,7 @@ const App: React.FC = () => {
                       className="flex-1 py-4 bg-gradient-to-r from-banana-500 to-banana-600 hover:from-banana-400 hover:to-banana-500 text-white font-bold rounded-xl shadow-lg shadow-banana-500/20 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
                   >
                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                      {isProcessing ? "Analyzing..." : "Cast a Spell"}
+                      {isProcessing ? "Analyzing..." : (editMode === EditMode.MAGIC ? "Magic Edit" : "Cast a Spell")}
                   </button>
 
                   {/* Square Buttons (Tools) */}

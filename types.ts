@@ -25,6 +25,11 @@ export enum ViewMode {
   EXPORT = 'EXPORT',
 }
 
+export enum EditMode {
+  COLOR = 'COLOR',
+  MAGIC = 'MAGIC',
+}
+
 export interface AnalysisResult {
   reasoning: string;
   suggestedSettings: FilterSettings;
