@@ -17,6 +17,32 @@ const defaultSettings: FilterSettings = {
 };
 
 const App: React.FC = () => {
+  // --- API KEY CHECK ---
+  // If API KEY is missing (e.g. forgot to set in Vercel), show an error immediately.
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+      return (
+          <div className="min-h-screen bg-[#121212] flex flex-col items-center justify-center p-6 text-center">
+              <div className="bg-red-500/10 border border-red-500 rounded-2xl p-8 max-w-lg">
+                  <h1 className="text-3xl font-bold text-red-500 mb-4">Missing API Key</h1>
+                  <p className="text-gray-300 mb-6">
+                      The application cannot start because the <code className="bg-black/30 px-2 py-1 rounded text-white">API_KEY</code> environment variable is missing.
+                  </p>
+                  <ul className="text-left text-sm text-gray-400 space-y-2 list-disc pl-5 mb-6">
+                      <li>Go to your <strong>Vercel Project Settings</strong>.</li>
+                      <li>Click <strong>Environment Variables</strong>.</li>
+                      <li>Add Key: <code className="text-white">API_KEY</code></li>
+                      <li>Add Value: Your <code className="text-white">AIza...</code> key.</li>
+                      <li>Redeploy the project.</li>
+                  </ul>
+                  <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl font-bold transition-colors">
+                      Go to Vercel Dashboard
+                  </a>
+              </div>
+          </div>
+      );
+  }
+
   const [view, setView] = useState<ViewMode>(ViewMode.HOME);
   const [isSidebarOpen, setSidebarOpen] = useState(false); // Mobile
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false); // Desktop
@@ -79,9 +105,13 @@ const App: React.FC = () => {
       setCurrentSettings(prev => ({...prev, ...result.suggestedSettings}));
       setAiReasoning(result.reasoning);
       setShowCompare(false); 
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Error", error);
-      setAiReasoning("Oops! The spell fizzled. Please try again.");
+      let errorMsg = "Oops! The spell fizzled. Please try again.";
+      if (error.message?.includes("403")) {
+          errorMsg = "Access Denied (403): Please check 'Website restrictions' in Google Cloud Console.";
+      }
+      setAiReasoning(errorMsg);
     } finally {
       setIsProcessing(false);
     }
