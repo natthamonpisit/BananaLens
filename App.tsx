@@ -18,7 +18,6 @@ const defaultSettings: FilterSettings = {
 
 const App: React.FC = () => {
   // --- API KEY CHECK ---
-  // If API KEY is missing (e.g. forgot to set in Vercel), show an error immediately.
   const apiKey = process.env.API_KEY;
   if (!apiKey || apiKey === 'undefined' || apiKey === '') {
       return (
@@ -125,11 +124,9 @@ const App: React.FC = () => {
 
       } else {
           // --- MAGIC EDIT MODE ---
-          // Save current state for Undo before applying change
           setOriginalImageForUndo(currentImage);
           
           const newImageBase64 = await generativeEditImage(cleanBase64, promptText, mimeType);
-          // Re-attach the same mime type to the returned base64 data
           setCurrentImage(`data:${mimeType};base64,${newImageBase64}`);
           setAiReasoning("Magic edit applied successfully!");
       }
@@ -138,18 +135,18 @@ const App: React.FC = () => {
     } catch (error: any) {
       console.error("AI Error", error);
       
-      // IMPROVED ERROR HANDLING
       let errorMessage = error.message || "An unknown error occurred.";
-      
+      let friendlyError = errorMessage;
+
       if (errorMessage.includes("429") || errorMessage.includes("Quota") || errorMessage.includes("quota")) {
-          errorMessage = "⚠️ Quota Exceeded. The free tier limit for this model has been reached. Please wait a moment and try again.";
+          friendlyError = "QUOTA_ERROR"; // Special flag for UI
       } else if (errorMessage.includes("403")) {
-          errorMessage = "🔒 Access Denied. Please ensure this domain is added to your Google Cloud Console restrictions.";
+          friendlyError = "ACCESS_ERROR"; // Special flag for UI
       } else if (errorMessage.includes("503")) {
-          errorMessage = "🤖 System Overloaded. The AI service is temporarily busy. Please try again.";
+          friendlyError = "🤖 System Overloaded. The AI service is temporarily busy. Please try again.";
       }
       
-      setAiReasoning(`ERROR: ${errorMessage}`);
+      setAiReasoning(`ERROR: ${friendlyError}`);
     } finally {
       setIsProcessing(false);
     }
@@ -159,10 +156,10 @@ const App: React.FC = () => {
     if (!currentImage) return;
     const newItem: PhotoItem = {
         id: Date.now().toString() + Math.random().toString().slice(2,6),
-        originalUrl: currentImage, // Saves the current state (including magic edits)
+        originalUrl: currentImage, 
         name: `Photo ${collection.length + 1}`,
         timestamp: Date.now(),
-        settings: currentSettings // Saves current CSS filters
+        settings: currentSettings 
     };
     setCollection([newItem, ...collection]);
     alert("Saved to collection!");
@@ -191,7 +188,7 @@ const App: React.FC = () => {
             }
             resolve();
         };
-        img.onerror = () => resolve(); // Fail safely
+        img.onerror = () => resolve(); 
       });
   };
 
@@ -209,26 +206,19 @@ const App: React.FC = () => {
 
   const handleBatchExport = async () => {
       if (exportSelection.size === 0) return;
-      
-      // Select items to export
       const itemsToExport = collection.filter(item => exportSelection.has(item.id));
-      
       let processed = 0;
       for (const item of itemsToExport) {
           await processAndDownloadImage(item);
           processed++;
-          // Small delay to prevent browser choking on multiple downloads
           await new Promise(r => setTimeout(r, 500));
       }
-      
-      setExportSelection(new Set()); // Clear selection
+      setExportSelection(new Set()); 
       alert(`Exported ${processed} photos.`);
   };
 
-  // --- Batch Import Logic ---
   const handleBatchImport = useCallback(async (files: FileList) => {
       const newItems: PhotoItem[] = [];
-      
       for (let i = 0; i < files.length; i++) {
           const file = files[i];
           try {
@@ -244,7 +234,6 @@ const App: React.FC = () => {
               console.error("Failed to import file", file.name, e);
           }
       }
-      
       setCollection(prev => [...newItems, ...prev]);
       alert(`Imported ${newItems.length} photos to your collection.`);
       setView(ViewMode.COLLECTION);
@@ -260,21 +249,14 @@ const App: React.FC = () => {
       setExportSelection(newSet);
   };
 
-
-  // --- View Renderers ---
-
   const renderHome = () => (
     <div className="flex flex-col h-full w-full max-w-6xl mx-auto p-4 md:p-6 space-y-4">
-      {/* Main Workspace */}
       <div className="flex-1 flex flex-col items-center justify-center min-h-0 relative bg-dark-surface/50 rounded-3xl border border-dark-border overflow-hidden p-8">
-        
         {!currentImage ? (
           <ImageUploader onImageSelected={handleImageSelect} />
         ) : (
           <>
-            {/* Top Right Controls */}
             <div className="absolute top-6 right-6 z-40 flex gap-2">
-                {/* Undo Button (Only visible if we have changes in Magic Mode or want to revert) */}
                 {editMode === EditMode.MAGIC && currentImage !== originalImageForUndo && (
                     <button
                         onClick={handleUndo}
@@ -286,7 +268,6 @@ const App: React.FC = () => {
                     </button>
                 )}
                 
-                {/* Upload New Button */}
                 <button
                 onClick={handleResetImage}
                 className="bg-black/50 hover:bg-banana-500 text-white px-4 py-2 rounded-lg backdrop-blur-md flex items-center gap-2 transition-colors border border-white/10 shadow-lg"
@@ -297,14 +278,12 @@ const App: React.FC = () => {
             </div>
 
             <div className="relative flex items-center justify-center max-w-full max-h-full shadow-2xl">
-                {/* Unified Viewer Component */}
                 <BeforeAfter 
                     originalUrl={currentImage} 
                     settings={currentSettings} 
                     isCompareActive={showCompare}
                 />
                 
-                {/* Overlay Loading State */}
                 {isProcessing && (
                     <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-50 backdrop-blur-sm rounded-lg">
                         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-banana-500 mb-4"></div>
@@ -316,13 +295,9 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* Controls Area - Always Visible */}
       <div className="w-full max-w-4xl mx-auto animate-fade-in-up shrink-0">
-          
-          {/* Unified Controls */}
           <div className={`bg-dark-surface p-6 rounded-2xl border border-dark-border space-y-6 shadow-lg transition-opacity ${!currentImage ? 'opacity-80' : ''}`}>
               
-              {/* Top Row: Header, Mode Switch & Inputs */}
               <div className="space-y-4">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-4">
@@ -330,8 +305,6 @@ const App: React.FC = () => {
                               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
                               Magic Controls
                           </h3>
-                          
-                          {/* Mode Toggle */}
                           <div className="bg-black/40 p-1 rounded-lg flex items-center border border-white/10">
                               <button
                                   onClick={() => setEditMode(EditMode.COLOR)}
@@ -348,7 +321,7 @@ const App: React.FC = () => {
                           </div>
                       </div>
 
-                       {aiReasoning && !isProcessing && (
+                       {aiReasoning && !isProcessing && !aiReasoning.startsWith('ERROR:') && (
                            <span className="text-xs text-banana-400 bg-banana-500/10 px-2 py-1 rounded-full border border-banana-500/20 hidden md:inline-block">Applied</span>
                        )}
                   </div>
@@ -383,9 +356,7 @@ const App: React.FC = () => {
                   </div>
               </div>
 
-              {/* Bottom Row: Actions */}
               <div className="flex flex-col md:flex-row gap-4">
-                   {/* Cast Spell Button (Main) */}
                   <button 
                       onClick={handleCastSpell}
                       disabled={isProcessing || !currentImage}
@@ -395,7 +366,6 @@ const App: React.FC = () => {
                       {isProcessing ? "Analyzing..." : (editMode === EditMode.MAGIC ? "Magic Edit" : "Cast a Spell")}
                   </button>
 
-                  {/* Square Buttons (Tools) */}
                   <div className="flex gap-3 justify-center">
                       <button 
                           onClick={() => setShowCompare(!showCompare)}
@@ -431,8 +401,36 @@ const App: React.FC = () => {
               </div>
 
               {aiReasoning && (
-                  <div className={`p-3 rounded-lg text-sm italic border-l-2 ${aiReasoning.startsWith('ERROR:') ? 'bg-red-500/20 text-red-200 border-red-500' : 'bg-black/20 text-gray-300 border-banana-500'}`}>
-                      "{aiReasoning}"
+                  <div className={`p-3 rounded-lg text-sm border-l-2 flex flex-col gap-2 ${aiReasoning.startsWith('ERROR:') ? 'bg-red-500/20 text-red-200 border-red-500' : 'bg-black/20 text-gray-300 border-banana-500'}`}>
+                      <span>
+                        {aiReasoning.replace('ERROR:', '')}
+                      </span>
+                      {aiReasoning.includes('QUOTA_ERROR') && (
+                         <div className="flex flex-col gap-1 mt-1">
+                             <p className="font-bold">⚠️ Quota Exceeded for Free Tier</p>
+                             <p>You need to enable a Billing Account in Google Cloud.</p>
+                             <a 
+                                href="https://console.cloud.google.com/billing" 
+                                target="_blank" 
+                                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold w-fit transition-colors"
+                             >
+                                 → Fix Billing Account
+                             </a>
+                         </div>
+                      )}
+                      {aiReasoning.includes('ACCESS_ERROR') && (
+                         <div className="flex flex-col gap-1 mt-1">
+                             <p className="font-bold">🔒 Domain Blocked</p>
+                             <p>Add this Vercel domain to your API Key restrictions.</p>
+                             <a 
+                                href="https://console.cloud.google.com/apis/credentials" 
+                                target="_blank" 
+                                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold w-fit transition-colors"
+                             >
+                                 → Fix API Key Restrictions
+                             </a>
+                         </div>
+                      )}
                   </div>
               )}
           </div>
@@ -446,12 +444,7 @@ const App: React.FC = () => {
         {collection.length === 0 ? (
             <div className="text-center py-20 text-gray-500">
                 <p>No photos saved yet.</p>
-                <button 
-                    onClick={() => setView(ViewMode.HOME)} 
-                    className="mt-4 text-banana-500 hover:underline"
-                >
-                    Start Editing
-                </button>
+                <button onClick={() => setView(ViewMode.HOME)} className="mt-4 text-banana-500 hover:underline">Start Editing</button>
             </div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -462,21 +455,14 @@ const App: React.FC = () => {
                                 src={item.originalUrl} 
                                 alt={item.name} 
                                 className="w-full h-full object-cover"
-                                style={{
-                                    filter: `brightness(${item.settings.brightness}%) contrast(${item.settings.contrast}%) saturate(${item.settings.saturation}%) sepia(${item.settings.sepia}%) grayscale(${item.settings.grayscale}%) hue-rotate(${item.settings.hueRotate}deg) blur(${item.settings.blur}px)`
-                                }}
+                                style={{filter: `brightness(${item.settings.brightness}%) contrast(${item.settings.contrast}%) saturate(${item.settings.saturation}%) sepia(${item.settings.sepia}%) grayscale(${item.settings.grayscale}%) hue-rotate(${item.settings.hueRotate}deg) blur(${item.settings.blur}px)`}}
                              />
                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                  <button 
                                     className="p-3 bg-white text-black rounded-full hover:bg-banana-400 font-medium flex items-center gap-2"
-                                    onClick={() => {
-                                        setCurrentImage(item.originalUrl);
-                                        setCurrentSettings(item.settings);
-                                        setView(ViewMode.HOME);
-                                    }}
+                                    onClick={() => { setCurrentImage(item.originalUrl); setCurrentSettings(item.settings); setView(ViewMode.HOME); }}
                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                                    Edit
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit
                                  </button>
                              </div>
                         </div>
@@ -495,28 +481,14 @@ const App: React.FC = () => {
       <div className="flex flex-col items-center justify-center h-full p-8 max-w-4xl mx-auto w-full">
            <h2 className="text-3xl font-bold text-white mb-2">Import Photos</h2>
            <p className="text-gray-400 mb-8">Add multiple photos to your collection to edit later.</p>
-           
            <div 
              className="w-full h-96 border-4 border-dashed border-banana-500/30 rounded-3xl flex flex-col items-center justify-center bg-dark-surface hover:bg-dark-surface/80 transition-colors cursor-pointer group relative overflow-hidden"
              onDragOver={(e) => e.preventDefault()}
-             onDrop={(e) => {
-                 e.preventDefault();
-                 if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                     handleBatchImport(e.dataTransfer.files);
-                 }
-             }}
+             onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleBatchImport(e.dataTransfer.files); }}
            >
-              <input 
-                type="file" 
-                accept="image/*" 
-                multiple
-                onChange={(e) => e.target.files && handleBatchImport(e.target.files)} 
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-              />
+              <input type="file" accept="image/*" multiple onChange={(e) => e.target.files && handleBatchImport(e.target.files)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"/>
               <div className="z-0 flex flex-col items-center space-y-4 group-hover:scale-105 transition-transform duration-300">
-                <div className="p-6 bg-banana-500/10 rounded-full text-banana-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
+                <div className="p-6 bg-banana-500/10 rounded-full text-banana-500"><svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
                 <h3 className="text-2xl font-bold text-white">Drop photos here</h3>
                 <p className="text-gray-400">or click to browse multiple files</p>
               </div>
@@ -527,43 +499,22 @@ const App: React.FC = () => {
   const renderExport = () => (
     <div className="p-8 w-full max-w-6xl mx-auto flex flex-col h-full">
         <div className="flex items-center justify-between mb-6">
-            <div>
-                <h2 className="text-3xl font-bold text-white">Batch Export</h2>
-                <p className="text-gray-400">Select photos to download them.</p>
-            </div>
+            <div><h2 className="text-3xl font-bold text-white">Batch Export</h2><p className="text-gray-400">Select photos to download them.</p></div>
             {exportSelection.size > 0 && (
-                <button 
-                    onClick={handleBatchExport}
-                    className="bg-banana-500 hover:bg-banana-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Download ({exportSelection.size})
+                <button onClick={handleBatchExport} className="bg-banana-500 hover:bg-banana-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download ({exportSelection.size})
                 </button>
             )}
         </div>
-
         {collection.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
-                <p>No photos in collection.</p>
-            </div>
+            <div className="flex-1 flex items-center justify-center text-gray-500"><p>No photos in collection.</p></div>
         ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {collection.map(item => {
                     const isSelected = exportSelection.has(item.id);
                     return (
-                        <div 
-                            key={item.id} 
-                            onClick={() => toggleExportSelection(item.id)}
-                            className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${isSelected ? 'border-banana-500 ring-2 ring-banana-500/50' : 'border-transparent hover:border-gray-600'}`}
-                        >
-                             <img 
-                                src={item.originalUrl} 
-                                alt={item.name} 
-                                className="w-full h-full object-cover"
-                                style={{
-                                    filter: `brightness(${item.settings.brightness}%) contrast(${item.settings.contrast}%) saturate(${item.settings.saturation}%) sepia(${item.settings.sepia}%) grayscale(${item.settings.grayscale}%) hue-rotate(${item.settings.hueRotate}deg) blur(${item.settings.blur}px)`
-                                }}
-                             />
+                        <div key={item.id} onClick={() => toggleExportSelection(item.id)} className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${isSelected ? 'border-banana-500 ring-2 ring-banana-500/50' : 'border-transparent hover:border-gray-600'}`}>
+                             <img src={item.originalUrl} alt={item.name} className="w-full h-full object-cover" style={{filter: `brightness(${item.settings.brightness}%) contrast(${item.settings.contrast}%) saturate(${item.settings.saturation}%) sepia(${item.settings.sepia}%) grayscale(${item.settings.grayscale}%) hue-rotate(${item.settings.hueRotate}deg) blur(${item.settings.blur}px)`}}/>
                              <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-banana-500 border-banana-500' : 'bg-black/40 border-white'}`}>
                                  {isSelected && <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                              </div>
@@ -577,15 +528,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-dark-bg flex font-sans">
-      <Sidebar 
-        currentView={view} 
-        setView={setView} 
-        isOpen={isSidebarOpen} 
-        toggleOpen={() => setSidebarOpen(!isSidebarOpen)} 
-        isCollapsed={isSidebarCollapsed}
-        toggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
-      />
-      
+      <Sidebar currentView={view} setView={setView} isOpen={isSidebarOpen} toggleOpen={() => setSidebarOpen(!isSidebarOpen)} isCollapsed={isSidebarCollapsed} toggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}/>
       <main className={`flex-1 relative min-h-screen flex flex-col pt-16 md:pt-0 transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'md:ml-0' : 'md:ml-64'}`}>
         {view === ViewMode.HOME && renderHome()}
         {view === ViewMode.COLLECTION && renderCollection()}
