@@ -137,8 +137,19 @@ const App: React.FC = () => {
       setShowCompare(false); 
     } catch (error: any) {
       console.error("AI Error", error);
-      // SHOW RAW ERROR MESSAGE
-      setAiReasoning(`ERROR: ${error.message}`);
+      
+      // IMPROVED ERROR HANDLING
+      let errorMessage = error.message || "An unknown error occurred.";
+      
+      if (errorMessage.includes("429") || errorMessage.includes("Quota") || errorMessage.includes("quota")) {
+          errorMessage = "⚠️ Quota Exceeded. The free tier limit for this model has been reached. Please wait a moment and try again.";
+      } else if (errorMessage.includes("403")) {
+          errorMessage = "🔒 Access Denied. Please ensure this domain is added to your Google Cloud Console restrictions.";
+      } else if (errorMessage.includes("503")) {
+          errorMessage = "🤖 System Overloaded. The AI service is temporarily busy. Please try again.";
+      }
+      
+      setAiReasoning(`ERROR: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }

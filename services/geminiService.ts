@@ -121,7 +121,8 @@ export const generativeEditImage = async (
   prompt: string,
   mimeType: string = "image/jpeg"
 ): Promise<string> => {
-  const model = "gemini-2.5-flash-image";
+  // UPGRADED to Nano Banana Pro (gemini-3-pro-image-preview) to solve quota issues and improve quality
+  const model = "gemini-3-pro-image-preview";
 
   // If user didn't provide a specific prompt, give a generic improvement prompt
   const finalPrompt = prompt || "Enhance the image quality and lighting";
