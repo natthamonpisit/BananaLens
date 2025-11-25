@@ -1,0 +1,5 @@
+{
+  "name": "BananaLens AI Editor",
+  "description": "An intelligent photo editor powered by Gemini Nano Banana. Upload photos, cast a spell to automatically adjust exposure and tone based on the subject (Nature, City, etc.), or use natural language to style your images.",
+  "requestFramePermissions": []
+}
